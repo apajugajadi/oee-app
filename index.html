@@ -1,0 +1,364 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>OEE Monitoring</title>
+<style>
+  :root{
+    --navy:#0b1f3a; --navy2:#132b52; --gold:#c9a227; --gold2:#e0c25e;
+    --bg:#0d1424; --card:#141d33; --card2:#1a2540; --text:#eef1f7; --muted:#8a93ab;
+    --green:#2e9e5b; --red:#d64545; --amber:#e0a72e; --border:#26314f;
+  }
+  *{box-sizing:border-box; -webkit-tap-highlight-color:transparent;}
+  body{margin:0; font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif; background:var(--bg); color:var(--text); padding-bottom:70px;}
+  header{background:linear-gradient(135deg,var(--navy),var(--navy2)); padding:14px 16px; position:sticky; top:0; z-index:20; box-shadow:0 2px 10px rgba(0,0,0,.3); display:flex; align-items:center; justify-content:space-between;}
+  header h1{font-size:16px; margin:0; letter-spacing:.3px;}
+  header .sub{font-size:11px; color:var(--gold2); margin-top:2px;}
+  .badge{font-size:10px; padding:3px 8px; border-radius:20px; font-weight:600;}
+  .badge.online{background:rgba(46,158,91,.2); color:var(--green); border:1px solid var(--green);}
+  .badge.offline{background:rgba(214,69,69,.2); color:var(--red); border:1px solid var(--red);}
+  main{padding:14px; max-width:520px; margin:0 auto;}
+  .card{background:var(--card); border:1px solid var(--border); border-radius:14px; padding:16px; margin-bottom:14px;}
+  .card h2{font-size:14px; margin:0 0 12px; color:var(--gold2); text-transform:uppercase; letter-spacing:.5px;}
+  label{display:block; font-size:12px; color:var(--muted); margin:10px 0 4px;}
+  input,select,textarea{width:100%; padding:11px; border-radius:9px; border:1px solid var(--border); background:var(--card2); color:var(--text); font-size:14px;}
+  input:focus,select:focus,textarea:focus{outline:none; border-color:var(--gold);}
+  .row{display:flex; gap:10px;}
+  .row > *{flex:1;}
+  button{cursor:pointer; border:none; border-radius:9px; font-weight:600; font-size:14px;}
+  .btn-primary{background:var(--gold); color:#1a1200; padding:13px; width:100%; margin-top:14px;}
+  .btn-primary:disabled{opacity:.4;}
+  .btn-secondary{background:var(--card2); color:var(--text); border:1px solid var(--border); padding:11px; width:100%;}
+  .btn-danger{background:rgba(214,69,69,.15); color:var(--red); border:1px solid var(--red); padding:9px;}
+  .btn-ghost{background:transparent; color:var(--gold2); padding:8px;}
+  nav.tabs{position:fixed; bottom:0; left:0; right:0; background:var(--navy); display:flex; border-top:1px solid var(--border); z-index:20;}
+  nav.tabs button{flex:1; background:none; color:var(--muted); padding:10px 4px 8px; font-size:10px; border-radius:0; display:flex; flex-direction:column; align-items:center; gap:3px;}
+  nav.tabs button.active{color:var(--gold);}
+  nav.tabs .ic{font-size:18px;}
+  .view{display:none;}
+  .view.active{display:block;}
+  .machine-grid{display:grid; grid-template-columns:1fr 1fr; gap:10px;}
+  .m-btn{background:var(--card2); border:1px solid var(--border); border-radius:12px; padding:14px 8px; text-align:center; position:relative; transition:.15s;}
+  .m-btn .name{font-size:13px; font-weight:600; display:block; margin-bottom:4px;}
+  .m-btn .state{font-size:10px; color:var(--muted);}
+  .m-btn .timer{font-size:15px; font-variant-numeric:tabular-nums; margin-top:4px; font-weight:700;}
+  .m-btn.running{background:rgba(46,158,91,.15); border-color:var(--green);}
+  .m-btn.running .timer{color:var(--green);}
+  .m-btn.down{background:rgba(214,69,69,.18); border-color:var(--red); animation:pulse 1.6s infinite;}
+  .m-btn.down .timer{color:var(--red);}
+  @keyframes pulse{0%,100%{opacity:1;}50%{opacity:.72;}}
+  .kpi-grid{display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-top:10px;}
+  .kpi{background:var(--card2); border-radius:12px; padding:12px; text-align:center;}
+  .kpi .val{font-size:22px; font-weight:800; color:var(--gold2);}
+  .kpi .lbl{font-size:10px; color:var(--muted); margin-top:2px;}
+  .kpi.oee{grid-column:1/-1; background:linear-gradient(135deg,var(--navy2),#1c2f57);}
+  .kpi.oee .val{font-size:32px; color:var(--gold);}
+  .event-item{display:flex; justify-content:space-between; align-items:center; padding:9px 0; border-bottom:1px solid var(--border); font-size:12px;}
+  .event-item:last-child{border-bottom:none;}
+  .event-thumb{width:34px; height:34px; border-radius:7px; object-fit:cover; margin-left:8px; cursor:pointer;}
+  .event-item .tag{font-size:9px; padding:2px 6px; border-radius:6px; margin-right:6px;}
+  .tag.internal{background:rgba(214,69,69,.2); color:var(--red);}
+  .tag.external{background:rgba(224,167,46,.2); color:var(--amber);}
+  .tag.running{background:rgba(46,158,91,.2); color:var(--green);}
+  .modal-bg{position:fixed; inset:0; background:rgba(0,0,0,.6); z-index:50; display:none; align-items:flex-end;}
+  .modal-bg.active{display:flex;}
+  .modal{background:var(--card); width:100%; border-radius:18px 18px 0 0; padding:18px; max-height:85vh; overflow-y:auto;}
+  .modal h3{margin:0 0 12px; font-size:15px;}
+  .chip-list{display:flex; flex-wrap:wrap; gap:8px; margin-top:8px;}
+  .chip{padding:9px 13px; border-radius:20px; background:var(--card2); border:1px solid var(--border); font-size:12px;}
+  .chip.sel{background:var(--gold); color:#1a1200; border-color:var(--gold); font-weight:700;}
+  .muted{color:var(--muted); font-size:12px;}
+  .list-row{display:flex; justify-content:space-between; align-items:center; padding:10px 0; border-bottom:1px solid var(--border);}
+  .list-row:last-child{border-bottom:none;}
+  .empty{text-align:center; color:var(--muted); font-size:12px; padding:24px 0;}
+  .sync-dot{width:7px; height:7px; border-radius:50%; display:inline-block; margin-right:5px;}
+  .sync-dot.pending{background:var(--amber);}
+  .sync-dot.done{background:var(--green);}
+  .filter-bar{display:flex; gap:8px; overflow-x:auto; padding-bottom:4px; margin-bottom:10px;}
+  .filter-bar select{width:auto; flex:none; font-size:12px; padding:8px 10px;}
+  .toast{position:fixed; top:70px; left:50%; transform:translateX(-50%); background:var(--card2); border:1px solid var(--gold); padding:10px 12px 10px 18px; border-radius:10px; font-size:13px; z-index:100; display:none; align-items:center; gap:10px; max-width:88vw;}
+  .toast.show{display:flex;}
+  .toast.error{border-color:var(--red); background:rgba(214,69,69,.15);}
+  .toast-close{cursor:pointer; color:var(--muted); font-size:14px; padding:2px 4px; flex-shrink:0;}
+  .toast-close:hover{color:var(--text);}
+  a.link{color:var(--gold2);}
+</style>
+</head>
+<body>
+
+<header>
+  <div>
+    <h1>OEE Monitoring</h1>
+    <div class="sub" id="headerSub">Field Data Collection</div>
+  </div>
+  <span class="badge" id="netBadge">·</span>
+</header>
+
+<main>
+
+  <!-- HOME / START SESSION -->
+  <section class="view active" id="view-home">
+    <div class="card" id="noActiveSession">
+      <h2>Mulai Sesi</h2>
+      <label>Mode</label>
+      <div class="row">
+        <select id="sMode">
+          <option value="observasi">Observasi (SAT)</option>
+          <option value="harian">Monitoring Harian</option>
+        </select>
+      </div>
+      <label>PU</label>
+      <select id="sPU"></select>
+      <label>Line / Mesin Utama</label>
+      <select id="sLine"></select>
+      <label>Shift</label>
+      <select id="sShift">
+        <option>Shift 1</option><option>Shift 2</option><option>Shift 3</option><option>Non-shift</option>
+      </select>
+      <label>Produk &amp; Ukuran Kemasan</label>
+      <select id="sProduct" onchange="onProductSelect()"></select>
+      <div class="row">
+        <div>
+          <label>Nominal Speed (bpm)</label>
+          <input type="number" id="sSpeed" placeholder="30">
+        </div>
+        <div>
+          <label>Product Counter Awal</label>
+          <input type="number" id="sBefore" placeholder="0">
+        </div>
+      </div>
+      <button class="btn-primary" onclick="startSession()">Mulai Sesi</button>
+    </div>
+
+    <div class="card" id="activeSessionCard" style="display:none">
+      <h2>Sesi Aktif</h2>
+      <div class="muted" id="activeSessionInfo"></div>
+      <div class="kpi-grid" id="liveKpis"></div>
+      <div class="machine-grid" id="machineGrid" style="margin-top:14px"></div>
+      <button class="btn-secondary" style="margin-top:14px" onclick="openManualModal()">+ Tambah / Edit Event Manual</button>
+      <button class="btn-primary" onclick="openEndSessionModal()">Akhiri Sesi</button>
+    </div>
+
+    <div class="card" id="eventLogCard" style="display:none">
+      <h2>Log Event</h2>
+      <div id="eventLog"><div class="empty">Belum ada event</div></div>
+    </div>
+  </section>
+
+  <!-- DASHBOARD -->
+  <section class="view" id="view-dashboard">
+    <div class="card">
+      <h2>Filter</h2>
+      <div class="filter-bar">
+        <select id="fPU"><option value="">Semua PU</option></select>
+        <select id="fLine"><option value="">Semua Line</option></select>
+        <select id="fMode"><option value="">Semua Mode</option><option value="observasi">Observasi</option><option value="harian">Harian</option></select>
+      </div>
+      <button class="btn-secondary" onclick="pullDashboard()">🔄 Tarik Data Terbaru</button>
+    </div>
+    <div class="card">
+      <h2>Ringkasan OEE</h2>
+      <div class="kpi-grid" id="dashKpis"></div>
+    </div>
+    <div class="card">
+      <h2>Top Downtime Kategori</h2>
+      <div id="paretoList"><div class="empty">Belum ada data</div></div>
+    </div>
+    <div class="card">
+      <h2>Downtime per Fungsi</h2>
+      <div id="fungsiList"><div class="empty">Belum ada data</div></div>
+    </div>
+    <div class="card">
+      <h2>Riwayat Sesi</h2>
+      <div id="sessionHistory"><div class="empty">Belum ada data</div></div>
+    </div>
+  </section>
+
+  <!-- SYNC -->
+  <section class="view" id="view-sync">
+    <div class="card">
+      <h2>Status Sinkronisasi</h2>
+      <div class="list-row"><span class="muted">Sesi belum sync</span><span id="pendingSessCount">0</span></div>
+      <div class="list-row"><span class="muted">Event belum sync</span><span id="pendingEvtCount">0</span></div>
+      <button class="btn-primary" onclick="syncAll()">⬆ Sync Sekarang</button>
+      <p class="muted" id="syncStatus" style="margin-top:10px"></p>
+    </div>
+    <div class="card">
+      <h2>Konfigurasi Server</h2>
+      <label>Apps Script Web App URL</label>
+      <input type="text" id="apiUrl" placeholder="https://script.google.com/macros/s/xxx/exec">
+      <button class="btn-secondary" style="margin-top:10px" onclick="saveApiUrl()">Simpan URL</button>
+    </div>
+    <div class="card">
+      <h2>Data Lokal</h2>
+      <button class="btn-danger" style="width:100%" onclick="clearSyncedData()">Hapus Data Lokal yang Sudah Sync</button>
+    </div>
+  </section>
+
+  <!-- ADMIN -->
+  <section class="view" id="view-admin">
+    <div class="card" id="adminLock">
+      <h2>Akses Admin</h2>
+      <label>PIN Admin</label>
+      <input type="password" id="adminPin" placeholder="Masukkan PIN">
+      <button class="btn-primary" onclick="checkAdminPin()">Masuk</button>
+      <p class="muted" style="margin-top:8px">Default PIN: 2027 (ganti di kode setelah deploy)</p>
+    </div>
+    <div id="adminPanel" style="display:none">
+      <div class="card">
+        <h2>Master PU & Line</h2>
+        <div class="row">
+          <input type="text" id="newPU" placeholder="Nama PU (e.g. PUG)">
+          <button class="btn-secondary" onclick="addPU()" style="flex:0 0 70px">+ PU</button>
+        </div>
+        <div class="row" style="margin-top:8px">
+          <select id="lineParentPU"></select>
+          <input type="text" id="newLine" placeholder="Nama Line">
+          <button class="btn-secondary" onclick="addLine()" style="flex:0 0 70px">+ Line</button>
+        </div>
+        <div id="puLineList" style="margin-top:10px"></div>
+      </div>
+      <div class="card">
+        <h2>Master Mesin</h2>
+        <div class="row">
+          <input type="text" id="newMachine" placeholder="Nama Mesin (e.g. Filler)">
+          <button class="btn-secondary" onclick="addMachine()" style="flex:0 0 70px">+ Add</button>
+        </div>
+        <div id="machineList" style="margin-top:10px"></div>
+      </div>
+      <div class="card">
+        <h2>Master Produk &amp; Speed Ideal</h2>
+        <p class="muted" style="margin-top:0">Dipakai buat auto-isi Nominal Speed pas mulai sesi (basis hitung Performance).</p>
+        <label>Line</label>
+        <select id="prodLineSel"></select>
+        <div class="row" style="margin-top:8px">
+          <input type="text" id="newProdName" placeholder="Nama Produk">
+          <input type="text" id="newProdSize" placeholder="Ukuran Kemasan (e.g. 220ml)">
+        </div>
+        <div class="row" style="margin-top:8px">
+          <input type="number" id="newProdSpeed" placeholder="Ideal Speed (bpm)">
+          <button class="btn-secondary" onclick="addProduct()" style="flex:0 0 90px">+ Add</button>
+        </div>
+        <div id="productList" style="margin-top:10px"></div>
+      </div>
+      <div class="card">
+        <h2>Master Kategori Downtime</h2>
+        <p class="muted" style="margin-top:0">Satu daftar terpusat, berlaku semua mesin & line (skema MASTER_KATEGORI).</p>
+        <div class="row">
+          <input type="text" id="newKode" placeholder="Kode (e.g. FL)" style="flex:0 0 90px">
+          <input type="text" id="newKategori" placeholder="Nama Kategori (e.g. Flushing)">
+        </div>
+        <div class="row" style="margin-top:8px">
+          <input type="text" id="newGroupingBesar" placeholder="Grouping Besar (Fungsi)">
+          <input type="text" id="newGroupingSub" placeholder="Grouping Sub-Fungsi">
+        </div>
+        <div class="row" style="margin-top:8px">
+          <select id="newStatus">
+            <option value="Unplanned">Unplanned</option>
+            <option value="Planned (Penuh)">Planned (Penuh)</option>
+            <option value="Planned dengan Toleransi">Planned dengan Toleransi</option>
+          </select>
+          <input type="text" id="newAtribusi" placeholder="Atribusi/PIC (opsional)">
+        </div>
+        <button class="btn-secondary" style="margin-top:8px" onclick="addKategori()">+ Tambah Kategori</button>
+        <div id="kategoriList" style="margin-top:10px"></div>
+      </div>
+      <div class="card">
+        <p class="muted"><b>Unplanned</b> = masuk hitungan OEE, mengurangi Availability.<br><b>Planned (Penuh)</b> / <b>Planned dengan Toleransi</b> = dikeluarkan dari waktu produksi sebelum hitung OEE (durasi tetap dicatat raw, tanpa potongan toleransi). Sesuai skema Status di MASTER_KATEGORI workbook.</p>
+      </div>
+    </div>
+  </section>
+
+</main>
+
+<nav class="tabs">
+  <button class="active" data-view="home" onclick="switchTab('home')"><span class="ic">⏱</span>Sesi</button>
+  <button data-view="dashboard" onclick="switchTab('dashboard')"><span class="ic">📊</span>Dashboard</button>
+  <button data-view="sync" onclick="switchTab('sync')"><span class="ic">☁</span>Sync</button>
+  <button data-view="admin" onclick="switchTab('admin')"><span class="ic">⚙</span>Admin</button>
+</nav>
+
+<!-- REASON PICKER MODAL -->
+<div class="modal-bg" id="reasonModalBg">
+  <div class="modal">
+    <h3 id="reasonModalTitle">Pilih Kategori Downtime</h3>
+    <input type="text" id="reasonSearch" placeholder="Cari kode/kategori..." oninput="filterReasonChips()" style="margin-bottom:8px">
+    <div class="chip-list" id="reasonChips"></div>
+    <label style="margin-top:12px">Catatan (opsional)</label>
+    <textarea id="reasonNote" rows="2"></textarea>
+    <label style="margin-top:10px">Foto (opsional)</label>
+    <input type="file" id="reasonPhotoInput" accept="image/*" capture="environment" onchange="handlePhotoSelect(event,'reason')">
+    <div id="reasonPhotoPreviewWrap" style="display:none; margin-top:8px; position:relative;">
+      <img id="reasonPhotoPreview" style="width:100%; border-radius:9px; display:block;">
+      <button class="btn-danger" style="position:absolute; top:6px; right:6px; padding:4px 9px;" onclick="removePhoto('reason')">Hapus</button>
+    </div>
+    <button class="btn-primary" onclick="confirmDowntimeReason()">Konfirmasi</button>
+    <button class="btn-ghost" style="width:100%; margin-top:6px" onclick="closeModal('reasonModalBg')">Batal</button>
+  </div>
+</div>
+
+<!-- MANUAL EVENT MODAL -->
+<div class="modal-bg" id="manualModalBg">
+  <div class="modal">
+    <h3>Tambah Event Manual</h3>
+    <label>Mesin</label>
+    <select id="manMachine" onchange="renderManualReasons()"></select>
+    <label>Tipe</label>
+    <select id="manType" onchange="renderManualReasons()">
+      <option value="downtime">Downtime</option>
+      <option value="running">Running</option>
+    </select>
+    <div id="manReasonWrap">
+      <label>Kategori Downtime</label>
+      <select id="manReason"></select>
+    </div>
+    <div class="row">
+      <div>
+        <label>Jam Mulai</label>
+        <input type="time" id="manStart" step="1">
+      </div>
+      <div>
+        <label>Jam Selesai</label>
+        <input type="time" id="manEnd" step="1">
+      </div>
+    </div>
+    <label>Catatan</label>
+    <textarea id="manNote" rows="2"></textarea>
+    <label style="margin-top:10px">Foto (opsional)</label>
+    <input type="file" id="manPhotoInput" accept="image/*" capture="environment" onchange="handlePhotoSelect(event,'man')">
+    <div id="manPhotoPreviewWrap" style="display:none; margin-top:8px; position:relative;">
+      <img id="manPhotoPreview" style="width:100%; border-radius:9px; display:block;">
+      <button class="btn-danger" style="position:absolute; top:6px; right:6px; padding:4px 9px;" onclick="removePhoto('man')">Hapus</button>
+    </div>
+    <button class="btn-primary" onclick="saveManualEvent()">Simpan Event</button>
+    <button class="btn-ghost" style="width:100%; margin-top:6px" onclick="closeModal('manualModalBg')">Batal</button>
+  </div>
+</div>
+
+<!-- END SESSION MODAL -->
+<div class="modal-bg" id="endModalBg">
+  <div class="modal">
+    <h3>Akhiri Sesi</h3>
+    <label>Product Counter Akhir</label>
+    <input type="number" id="endAfter" placeholder="0">
+    <label>Reject (pcs)</label>
+    <input type="number" id="endReject" placeholder="0" value="0">
+    <div class="kpi-grid" id="endPreview" style="margin-top:14px"></div>
+    <button class="btn-primary" onclick="finishSession()">Simpan &amp; Selesaikan Sesi</button>
+    <button class="btn-ghost" style="width:100%; margin-top:6px" onclick="closeModal('endModalBg')">Batal</button>
+  </div>
+</div>
+
+<div class="modal-bg" id="photoViewBg">
+  <div class="modal" style="padding:12px">
+    <img id="photoViewImg" style="width:100%; border-radius:12px; display:block;">
+    <button class="btn-ghost" style="width:100%; margin-top:10px" onclick="closeModal('photoViewBg')">Tutup</button>
+  </div>
+</div>
+
+<div class="toast" id="toast"><span id="toastMsg"></span><span class="toast-close" onclick="dismissToast()">✕</span></div>
+
+<script src="app.js"></script>
+</body>
+</html>
