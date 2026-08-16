@@ -17,9 +17,13 @@ const SHEET_ID = 'PASTE_SHEET_ID_DI_SINI';
 const PHOTO_FOLDER_NAME = 'OEE Monitoring - Foto Downtime'; // folder Drive dibuat otomatis
 const SESSIONS_SHEET = 'Sessions';
 const EVENTS_SHEET = 'Events';
+const PARAMETERS_SHEET = 'Parameters';
+const COUNTER_SHEET = 'CounterPings'; // belum dipakai app — siap-siap buat upgrade counter sensor proximity (lihat SETUP.md)
 
-const SESSION_HEADERS = ['id','mode','pu','puName','line','lineName','shift','date','productId','productName','packagingSize','startTime','endTime','nominalSpeed','before','after','reject','synced_at'];
-const EVENT_HEADERS = ['id','sessionId','machineId','machineName','kategoriId','kode','kategori','groupingBesar','groupingSub','status','atribusi','type','category','start','end','durationMin','source','note','photoUrl','synced_at'];
+const SESSION_HEADERS = ['id','mode','pu','puName','line','lineName','shift','date','productId','productName','packagingSize','startTime','endTime','nominalSpeed','plannedProductionMin','before','after','reject','synced_at'];
+const EVENT_HEADERS = ['id','sessionId','kategoriId','kode','kategori','groupingBesar','groupingSub','status','atribusi','type','category','start','end','durationMin','source','note','photoUrl','synced_at'];
+const PARAMETER_HEADERS = ['id','sessionId','machine','paramName','value','uom','note','recordedAt','synced_at'];
+const COUNTER_HEADERS = ['id','deviceId','sessionId','count','ts','received_at'];
 
 function getSS(){ return SpreadsheetApp.openById(SHEET_ID); }
 
@@ -64,10 +68,23 @@ function doPost(e){
     if(body.action==='sync'){
       return handleSync(body);
     }
+    if(body.action==='counterPing'){
+      return handleCounterPing(body);
+    }
     return jsonOut({ ok:false, error:'unknown action' });
   }catch(err){
     return jsonOut({ ok:false, error: err.message });
   }
+}
+
+// Endpoint buat alat counter sensor proximity (ESP32) — lihat SETUP.md bab "Upgrade Counter Otomatis".
+// Belum dipakai/dikonsumsi web app, cuma nampung data mentahnya dulu di sheet CounterPings.
+function handleCounterPing(body){
+  const sheet = ensureSheet(COUNTER_SHEET, COUNTER_HEADERS);
+  sheet.appendRow([
+    Utilities.getUuid(), body.deviceId||'', body.sessionId||'', body.count, body.ts||'', new Date().toISOString(),
+  ]);
+  return jsonOut({ ok:true });
 }
 
 function doGet(e){
@@ -85,6 +102,7 @@ function doGet(e){
 function handleSync(body){
   const sessSheet = ensureSheet(SESSIONS_SHEET, SESSION_HEADERS);
   const evtSheet = ensureSheet(EVENTS_SHEET, EVENT_HEADERS);
+  const paramSheet = ensureSheet(PARAMETERS_SHEET, PARAMETER_HEADERS);
   const now = new Date().toISOString();
 
   const existingSessIds = sessSheet.getLastRow()>1
@@ -94,7 +112,7 @@ function handleSync(body){
     sessSheet.appendRow([
       s.id, s.mode, s.pu, s.puName, s.line, s.lineName, s.shift, s.date,
       s.productId||'', s.productName||'', s.packagingSize||'',
-      s.startTime, s.endTime, s.nominalSpeed, s.before, s.after, s.reject, now,
+      s.startTime, s.endTime, s.nominalSpeed, s.plannedProductionMin||'', s.before, s.after, s.reject, now,
     ]);
   });
 
@@ -104,35 +122,50 @@ function handleSync(body){
     if(existingEvtIds.indexOf(ev.id)!==-1) return;
     const photoUrl = uploadPhoto(ev.photo, ev.id);
     evtSheet.appendRow([
-      ev.id, ev.sessionId, ev.machineId, ev.machineName||'', ev.kategoriId||'',
+      ev.id, ev.sessionId, ev.kategoriId||'',
       ev.kode||'', ev.kategori||'', ev.groupingBesar||'', ev.groupingSub||'', ev.status||'', ev.atribusi||'',
       ev.type, ev.category||'', ev.start, ev.end, ((ev.end-ev.start)/60000).toFixed(2),
       ev.source, ev.note||'', photoUrl, now,
     ]);
   });
 
-  return jsonOut({ ok:true, sessionsAdded: (body.sessions||[]).length, eventsAdded: (body.events||[]).length });
+  const existingParamIds = paramSheet.getLastRow()>1
+    ? paramSheet.getRange(2,1,paramSheet.getLastRow()-1,1).getValues().flat() : [];
+  (body.parameters||[]).forEach(p=>{
+    if(existingParamIds.indexOf(p.id)!==-1) return;
+    paramSheet.appendRow([
+      p.id, p.sessionId, p.machine||'', p.paramName||'', p.value, p.uom||'', p.note||'', p.recordedAt, now,
+    ]);
+  });
+
+  return jsonOut({ ok:true, sessionsAdded: (body.sessions||[]).length, eventsAdded: (body.events||[]).length, parametersAdded: (body.parameters||[]).length });
 }
 
 function getAllData(){
   const sessSheet = ensureSheet(SESSIONS_SHEET, SESSION_HEADERS);
   const evtSheet = ensureSheet(EVENTS_SHEET, EVENT_HEADERS);
+  const paramSheet = ensureSheet(PARAMETERS_SHEET, PARAMETER_HEADERS);
 
   const sessions = sheetToObjects(sessSheet).map(r=>({
     id:r.id, mode:r.mode, pu:r.pu, puName:r.puName, line:r.line, lineName:r.lineName,
     shift:r.shift, date:r.date, productId:r.productId, productName:r.productName, packagingSize:r.packagingSize,
     startTime:Number(r.startTime), endTime:Number(r.endTime),
-    nominalSpeed:Number(r.nominalSpeed), before:Number(r.before), after:Number(r.after),
+    nominalSpeed:Number(r.nominalSpeed), plannedProductionMin: r.plannedProductionMin ? Number(r.plannedProductionMin) : null,
+    before:Number(r.before), after:Number(r.after),
     reject:Number(r.reject), synced:true,
   }));
   const events = sheetToObjects(evtSheet).map(r=>({
-    id:r.id, sessionId:r.sessionId, machineId:r.machineId, kategoriId:r.kategoriId,
+    id:r.id, sessionId:r.sessionId, kategoriId:r.kategoriId,
     kode:r.kode, kategori:r.kategori, groupingBesar:r.groupingBesar, groupingSub:r.groupingSub,
     status:r.status, atribusi:r.atribusi,
     type:r.type, category:r.category, start:Number(r.start), end:Number(r.end),
     source:r.source, note:r.note, photoUrl:r.photoUrl, synced:true,
   }));
-  return { sessions, events };
+  const parameters = sheetToObjects(paramSheet).map(r=>({
+    id:r.id, sessionId:r.sessionId, machine:r.machine, paramName:r.paramName,
+    value:Number(r.value), uom:r.uom, note:r.note, recordedAt:Number(r.recordedAt), synced:true,
+  }));
+  return { sessions, events, parameters };
 }
 
 function sheetToObjects(sh){

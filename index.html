@@ -54,6 +54,23 @@
   .kpi .lbl{font-size:10px; color:var(--muted); margin-top:2px;}
   .kpi.oee{grid-column:1/-1; background:linear-gradient(135deg,var(--navy2),#1c2f57);}
   .kpi.oee .val{font-size:32px; color:var(--gold);}
+  .session-timer{background:linear-gradient(135deg,var(--navy2),#1c2f57); border-radius:12px; padding:14px; text-align:center; margin-bottom:12px;}
+  .session-timer .val{font-size:34px; font-weight:800; color:var(--gold); font-variant-numeric:tabular-nums;}
+  .session-timer .lbl{font-size:11px; color:var(--muted); margin-top:2px;}
+  .line-status{background:var(--card2); border:1px solid var(--border); border-radius:12px; padding:18px; text-align:center; transition:.15s;}
+  .line-status .lbl{font-size:13px; font-weight:600; color:var(--muted);}
+  .line-status .val{font-size:30px; font-weight:800; font-variant-numeric:tabular-nums; margin-top:4px;}
+  .line-status.running{background:rgba(46,158,91,.15); border-color:var(--green);}
+  .line-status.running .val{color:var(--green);}
+  .line-status.down{background:rgba(214,69,69,.18); border-color:var(--red); animation:pulse 1.6s infinite;}
+  .line-status.down .val{color:var(--red);}
+  .bar-row{margin-bottom:12px;}
+  .bar-row:last-child{margin-bottom:0;}
+  .bar-row-top{display:flex; justify-content:space-between; align-items:baseline; gap:8px; font-size:12px; margin-bottom:4px;}
+  .bar-row-top .bar-label{color:var(--text); overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
+  .bar-row-top .bar-value{color:var(--muted); font-weight:700; font-variant-numeric:tabular-nums; flex:0 0 auto;}
+  .bar-track{background:var(--card2); border-radius:4px; height:10px; overflow:hidden;}
+  .bar-fill{background:var(--gold); height:100%; border-radius:0 4px 4px 0;}
   .event-item{display:flex; justify-content:space-between; align-items:center; padding:9px 0; border-bottom:1px solid var(--border); font-size:12px;}
   .event-item:last-child{border-bottom:none;}
   .event-thumb{width:34px; height:34px; border-radius:7px; object-fit:cover; margin-left:8px; cursor:pointer;}
@@ -71,6 +88,12 @@
   .muted{color:var(--muted); font-size:12px;}
   .list-row{display:flex; justify-content:space-between; align-items:center; padding:10px 0; border-bottom:1px solid var(--border);}
   .list-row:last-child{border-bottom:none;}
+  .sess-row{padding:10px 0; border-bottom:1px solid var(--border);}
+  .sess-row:last-child{border-bottom:none;}
+  .sess-row-top{display:flex; justify-content:space-between; align-items:baseline; gap:8px; font-size:12px;}
+  .sess-row-top b{color:var(--gold2); font-size:14px; flex:0 0 auto;}
+  .sess-raw{display:flex; flex-wrap:wrap; gap:4px 12px; margin-top:6px; font-size:11px; color:var(--muted);}
+  .sess-raw b{color:var(--text); font-weight:700; font-variant-numeric:tabular-nums;}
   .empty{text-align:center; color:var(--muted); font-size:12px; padding:24px 0;}
   .sync-dot{width:7px; height:7px; border-radius:50%; display:inline-block; margin-right:5px;}
   .sync-dot.pending{background:var(--amber);}
@@ -128,21 +151,37 @@
           <input type="number" id="sBefore" placeholder="0">
         </div>
       </div>
+      <label>Planned Production Time (jam) — opsional</label>
+      <input type="number" id="sPlannedHours" step="0.1" placeholder="Kosongin aja kalau gak ada target, misal SAT/running test 4 jam baru diisi 4">
       <button class="btn-primary" onclick="startSession()">Mulai Sesi</button>
     </div>
 
     <div class="card" id="activeSessionCard" style="display:none">
       <h2>Sesi Aktif</h2>
+      <div class="session-timer">
+        <div class="val" id="sessionElapsed">00:00:00</div>
+        <div class="lbl">Sesi Berjalan</div>
+      </div>
       <div class="muted" id="activeSessionInfo"></div>
       <div class="kpi-grid" id="liveKpis"></div>
-      <div class="machine-grid" id="machineGrid" style="margin-top:14px"></div>
-      <button class="btn-secondary" style="margin-top:14px" onclick="openManualModal()">+ Tambah / Edit Event Manual</button>
+      <div class="line-status" id="lineStatusBox" style="margin-top:14px">
+        <div class="lbl" id="lineStatusLbl">Running</div>
+        <div class="val" id="lineStatusVal">00:00:00</div>
+      </div>
+      <button class="btn-primary" id="lineToggleBtn" style="margin-top:10px" onclick="onLineToggle()">⏸ Downtime</button>
+      <button class="btn-secondary" style="margin-top:10px" onclick="openManualModal()">+ Tambah / Edit Event Manual</button>
+      <button class="btn-secondary" style="margin-top:10px" onclick="openParamModal()">📋 Catat Parameter Mesin</button>
       <button class="btn-primary" onclick="openEndSessionModal()">Akhiri Sesi</button>
     </div>
 
     <div class="card" id="eventLogCard" style="display:none">
       <h2>Log Event</h2>
       <div id="eventLog"><div class="empty">Belum ada event</div></div>
+    </div>
+
+    <div class="card" id="paramLogCard" style="display:none">
+      <h2>Log Parameter Mesin</h2>
+      <div id="paramLog"><div class="empty">Belum ada parameter</div></div>
     </div>
   </section>
 
@@ -181,6 +220,7 @@
       <h2>Status Sinkronisasi</h2>
       <div class="list-row"><span class="muted">Sesi belum sync</span><span id="pendingSessCount">0</span></div>
       <div class="list-row"><span class="muted">Event belum sync</span><span id="pendingEvtCount">0</span></div>
+      <div class="list-row"><span class="muted">Parameter belum sync</span><span id="pendingParamCount">0</span></div>
       <button class="btn-primary" onclick="syncAll()">⬆ Sync Sekarang</button>
       <p class="muted" id="syncStatus" style="margin-top:10px"></p>
     </div>
@@ -192,7 +232,8 @@
     </div>
     <div class="card">
       <h2>Data Lokal</h2>
-      <button class="btn-danger" style="width:100%" onclick="clearSyncedData()">Hapus Data Lokal yang Sudah Sync</button>
+      <button class="btn-secondary" style="width:100%" onclick="exportBackup()">⬇ Export Backup (JSON)</button>
+      <button class="btn-danger" style="width:100%; margin-top:10px" onclick="clearSyncedData()">Hapus Data Lokal yang Sudah Sync</button>
     </div>
   </section>
 
@@ -206,6 +247,11 @@
       <p class="muted" style="margin-top:8px">Default PIN: 2027 (ganti di kode setelah deploy)</p>
     </div>
     <div id="adminPanel" style="display:none">
+      <div class="card">
+        <h2>Import Master Data Standar</h2>
+        <p class="muted" style="margin-top:0">Isi otomatis Master Kategori Downtime (66 kode) & Master Mesin (19 mesin) dari daftar standar. Sesi/event yang udah tercatat gak kehapus — cuma master data yang diganti.</p>
+        <button class="btn-secondary" style="width:100%" onclick="importStandardMasterData()">⬇ Import Master Data Standar</button>
+      </div>
       <div class="card">
         <h2>Master PU & Line</h2>
         <div class="row">
@@ -221,6 +267,7 @@
       </div>
       <div class="card">
         <h2>Master Mesin</h2>
+        <p class="muted" style="margin-top:0">Dipakai buat dropdown pilihan mesin pas Catat Parameter Mesin.</p>
         <div class="row">
           <input type="text" id="newMachine" placeholder="Nama Mesin (e.g. Filler)">
           <button class="btn-secondary" onclick="addMachine()" style="flex:0 0 70px">+ Add</button>
@@ -261,7 +308,8 @@
           </select>
           <input type="text" id="newAtribusi" placeholder="Atribusi/PIC (opsional)">
         </div>
-        <button class="btn-secondary" style="margin-top:8px" onclick="addKategori()">+ Tambah Kategori</button>
+        <button class="btn-secondary" id="kategoriFormBtn" style="margin-top:8px" onclick="addKategori()">+ Tambah Kategori</button>
+        <button class="btn-ghost" id="kategoriCancelBtn" style="width:100%; display:none;" onclick="cancelEditKategori()">Batal Edit</button>
         <div id="kategoriList" style="margin-top:10px"></div>
       </div>
       <div class="card">
@@ -294,7 +342,7 @@
       <button class="btn-danger" style="position:absolute; top:6px; right:6px; padding:4px 9px;" onclick="removePhoto('reason')">Hapus</button>
     </div>
     <button class="btn-primary" onclick="confirmDowntimeReason()">Konfirmasi</button>
-    <button class="btn-ghost" style="width:100%; margin-top:6px" onclick="closeModal('reasonModalBg')">Batal</button>
+    <button class="btn-ghost" style="width:100%; margin-top:6px" onclick="cancelReasonModal()">Batal</button>
   </div>
 </div>
 
@@ -302,8 +350,6 @@
 <div class="modal-bg" id="manualModalBg">
   <div class="modal">
     <h3>Tambah Event Manual</h3>
-    <label>Mesin</label>
-    <select id="manMachine" onchange="renderManualReasons()"></select>
     <label>Tipe</label>
     <select id="manType" onchange="renderManualReasons()">
       <option value="downtime">Downtime</option>
@@ -333,6 +379,31 @@
     </div>
     <button class="btn-primary" onclick="saveManualEvent()">Simpan Event</button>
     <button class="btn-ghost" style="width:100%; margin-top:6px" onclick="closeModal('manualModalBg')">Batal</button>
+  </div>
+</div>
+
+<!-- PARAMETER MESIN MODAL -->
+<div class="modal-bg" id="paramModalBg">
+  <div class="modal">
+    <h3>Catat Parameter Mesin</h3>
+    <label>Mesin</label>
+    <select id="paramMachine"></select>
+    <label>Nama Parameter</label>
+    <input type="text" id="paramName" placeholder="mis. Tekanan Filling">
+    <div class="row">
+      <div>
+        <label>Value</label>
+        <input type="number" id="paramValue" step="any" placeholder="0">
+      </div>
+      <div>
+        <label>UOM</label>
+        <input type="text" id="paramUom" placeholder="bar, °C, rpm, Nm, dst">
+      </div>
+    </div>
+    <label>Keterangan (opsional)</label>
+    <textarea id="paramNote" rows="2"></textarea>
+    <button class="btn-primary" onclick="saveParameter()">Simpan Parameter</button>
+    <button class="btn-ghost" style="width:100%; margin-top:6px" onclick="closeModal('paramModalBg')">Batal</button>
   </div>
 </div>
 
